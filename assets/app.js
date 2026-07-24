@@ -13,9 +13,12 @@ const synth = window.speechSynthesis;
 const SPEECH_RATE_KEY = "japanese-kana-speech-rate";
 const DEFAULT_SPEECH_RATE = 0.55;
 const ALLOWED_SPEECH_RATES = new Set([0.42, 0.55, 0.70, 0.90]);
+const PARTICLES = new Set(["は", "を", "が", "に", "で", "と", "の", "へ", "も", "から", "まで", "より", "ので", "では"]);
 
 let jaVoice = null;
 let speechRate = DEFAULT_SPEECH_RATE;
+let playbackSession = 0;
+let pauseTimer = null;
 
 function chooseVoice() {
   const voices = synth.getVoices();
@@ -55,19 +58,107 @@ function esc(value) {
   })[character]);
 }
 
-function speak(text) {
+function stopSpeech() {
+  playbackSession += 1;
+  if (pauseTimer !== null) {
+    window.clearTimeout(pauseTimer);
+    pauseTimer = null;
+  }
   synth.cancel();
+}
+
+function makeUtterance(text, rate = speechRate) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "ja-JP";
-  utterance.rate = speechRate;
+  utterance.rate = rate;
   utterance.pitch = 1;
   utterance.volume = 1;
   if (jaVoice) utterance.voice = jaVoice;
-  synth.speak(utterance);
+  return utterance;
 }
 
-function audio(text, label = "播放", icon = false) {
-  return `<button type="button" class="audio${icon ? " icon" : ""}" data-speak="${esc(text)}" aria-label="播放 ${esc(text)}">${icon ? "▶" : `▶ ${esc(label)}`}</button>`;
+function speak(text) {
+  stopSpeech();
+  synth.speak(makeUtterance(text));
+}
+
+function sentencePauseMs() {
+  if (speechRate <= 0.42) return 520;
+  if (speechRate <= 0.55) return 410;
+  if (speechRate <= 0.70) return 280;
+  return 160;
+}
+
+function sentenceRate() {
+  return Math.max(0.34, speechRate * 0.88);
+}
+
+function buildSentenceSegments(tokens) {
+  const segments = [];
+  let current = "";
+  let tokenCount = 0;
+
+  tokens.forEach((token, index) => {
+    current += token.reading;
+    tokenCount += 1;
+    const isParticle = PARTICLES.has(token.surface) || PARTICLES.has(token.reading);
+    const isLast = index === tokens.length - 1;
+
+    if (isParticle || tokenCount >= 2 || isLast) {
+      segments.push(current);
+      current = "";
+      tokenCount = 0;
+    }
+  });
+
+  if (current) segments.push(current);
+  return segments.filter(Boolean);
+}
+
+function speakSentence(segments) {
+  stopSpeech();
+  const session = playbackSession;
+  let index = 0;
+
+  const playNext = () => {
+    if (session !== playbackSession || index >= segments.length) return;
+
+    const utterance = makeUtterance(segments[index], sentenceRate());
+    index += 1;
+    utterance.onend = () => {
+      if (session !== playbackSession) return;
+      pauseTimer = window.setTimeout(playNext, sentencePauseMs());
+    };
+    utterance.onerror = event => {
+      if (event.error !== "canceled" && event.error !== "interrupted") {
+        console.warn("整句發音失敗：", event.error);
+      }
+    };
+    synth.speak(utterance);
+  };
+
+  playNext();
+}
+
+function encodeSegments(segments) {
+  return encodeURIComponent(JSON.stringify(segments));
+}
+
+function decodeSegments(value) {
+  try {
+    const result = JSON.parse(decodeURIComponent(value));
+    return Array.isArray(result) ? result.filter(Boolean) : [];
+  } catch (error) {
+    console.warn("無法解析整句發音內容：", error);
+    return [];
+  }
+}
+
+function audio(text, label = "播放", icon = false, segments = null) {
+  const segmentsAttribute = segments?.length
+    ? ` data-speech-segments="${esc(encodeSegments(segments))}"`
+    : "";
+  return `<button type="button" class="audio${icon ? " icon" : ""}" data-speak="${esc(text)}"${segmentsAttribute} aria-label="播放 ${esc(text)}">${icon ? "▶" : `▶ ${esc(label)}`}</button>`;
 }
 
 function tokenCards(tokens) {
@@ -75,7 +166,8 @@ function tokenCards(tokens) {
 }
 
 function lesson(sentence, type) {
-  return `<section class="lesson ${type}"><div class="lesson-label">${type === "h" ? "平假名生活例句" : "片假名生活例句"}</div><div class="sentence-line"><div class="sentence">${esc(sentence.surface)}</div>${audio(sentence.reading, "整句")}</div><div class="reading-block"><div class="reading-line"><strong>整句假名</strong><span>${esc(sentence.reading)}</span></div><div class="reading-line romaji-only"><strong>逐詞羅馬字</strong><span>${esc(sentence.romaji)}</span></div><div class="reading-line"><strong>中文意思</strong><span class="translation meaning-answer">${esc(sentence.translation)}</span></div></div><div class="token-heading">逐詞拼讀</div><div class="tokens">${tokenCards(sentence.tokens)}</div></section>`;
+  const segments = buildSentenceSegments(sentence.tokens);
+  return `<section class="lesson ${type}"><div class="lesson-label">${type === "h" ? "平假名生活例句" : "片假名生活例句"}</div><div class="sentence-line"><div class="sentence">${esc(sentence.surface)}</div>${audio(sentence.reading, "慢速整句", false, segments)}</div><div class="reading-block"><div class="reading-line"><strong>整句假名</strong><span>${esc(sentence.reading)}</span></div><div class="reading-line romaji-only"><strong>逐詞羅馬字</strong><span>${esc(sentence.romaji)}</span></div><div class="reading-line"><strong>中文意思</strong><span class="translation meaning-answer">${esc(sentence.translation)}</span></div></div><div class="token-heading">逐詞拼讀</div><div class="tokens">${tokenCards(sentence.tokens)}</div></section>`;
 }
 
 function side(row, type) {
@@ -114,7 +206,17 @@ function render() {
 
 document.addEventListener("click", event => {
   const button = event.target.closest("[data-speak]");
-  if (button) speak(button.dataset.speak);
+  if (!button) return;
+
+  const segments = button.dataset.speechSegments
+    ? decodeSegments(button.dataset.speechSegments)
+    : [];
+
+  if (segments.length) {
+    speakSentence(segments);
+  } else {
+    speak(button.dataset.speak);
+  }
 });
 
 document.getElementById("search").addEventListener("input", render);
@@ -127,14 +229,14 @@ document.getElementById("viewFilter").addEventListener("change", event => {
 speechRateSelect.addEventListener("change", event => {
   const selectedRate = Number.parseFloat(event.target.value);
   if (!ALLOWED_SPEECH_RATES.has(selectedRate)) return;
-  synth.cancel();
+  stopSpeech();
   speechRate = selectedRate;
   saveSpeechRate();
 });
 
 document.getElementById("expandAll").onclick = () => document.querySelectorAll("details").forEach(details => { details.open = true; });
 document.getElementById("collapseAll").onclick = () => document.querySelectorAll("details").forEach(details => { details.open = false; });
-document.getElementById("stop").onclick = () => synth.cancel();
+document.getElementById("stop").onclick = stopSpeech;
 document.getElementById("toggleRomaji").onclick = event => {
   app.classList.toggle("hidden-romaji");
   event.currentTarget.textContent = app.classList.contains("hidden-romaji") ? "顯示羅馬字" : "隱藏羅馬字";
