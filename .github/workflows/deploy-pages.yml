@@ -29,21 +29,32 @@ jobs:
           from pathlib import Path
           import json
 
-          files = sorted(Path('data').glob('*.json'))
-          assert len(files) == 10, f'Expected 10 data files, found {len(files)}'
+          expected = [
+              '01-a.json', '02-ka.json', '03-sa.json', '04-ta.json', '05-na.json',
+              '06-ha.json', '07-ma.json', '08-ya.json', '09-ra.json', '10-wa.json',
+          ]
+          files = [Path('data') / name for name in expected]
+          missing = [str(path) for path in files if not path.is_file()]
+          assert not missing, f'Missing data files: {missing}'
+
           rows = []
           for path in files:
               value = json.loads(path.read_text(encoding='utf-8'))
               assert isinstance(value, list), f'{path} must contain a JSON array'
               rows.extend(value)
           assert len(rows) == 46, f'Expected 46 kana rows, found {len(rows)}'
+          assert len({row['h'] for row in rows}) == 46, 'Duplicate hiragana entries detected'
+          assert len({row['k'] for row in rows}) == 46, 'Duplicate katakana entries detected'
 
           source = '\n'.join([
               Path('index.html').read_text(encoding='utf-8'),
               Path('assets/styles.css').read_text(encoding='utf-8'),
               Path('assets/app.js').read_text(encoding='utf-8'),
           ])
-          forbidden = ['<table', '<thead', 'position:sticky', 'position: sticky', 'document.write', 'MutationObserver', 'chunks/']
+          forbidden = [
+              '<table', '<thead', 'position:sticky', 'position: sticky',
+              'document.write', 'MutationObserver', 'chunks/',
+          ]
           found = [term for term in forbidden if term in source]
           assert not found, f'Legacy architecture detected: {found}'
           PY
