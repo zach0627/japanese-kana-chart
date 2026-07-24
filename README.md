@@ -1,0 +1,1 @@
+# japanese-kana-chart
