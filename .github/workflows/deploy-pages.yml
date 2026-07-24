@@ -21,49 +21,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Build fixed static page
+      - name: Validate source
+        shell: bash
+        run: |
+          node --check assets/app.js
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          files = sorted(Path('data').glob('*.json'))
+          assert len(files) == 10, f'Expected 10 data files, found {len(files)}'
+          rows = []
+          for path in files:
+              value = json.loads(path.read_text(encoding='utf-8'))
+              assert isinstance(value, list), f'{path} must contain a JSON array'
+              rows.extend(value)
+          assert len(rows) == 46, f'Expected 46 kana rows, found {len(rows)}'
+
+          source = '\n'.join([
+              Path('index.html').read_text(encoding='utf-8'),
+              Path('assets/styles.css').read_text(encoding='utf-8'),
+              Path('assets/app.js').read_text(encoding='utf-8'),
+          ])
+          forbidden = ['<table', '<thead', 'position:sticky', 'position: sticky', 'document.write', 'MutationObserver', 'chunks/']
+          found = [term for term in forbidden if term in source]
+          assert not found, f'Legacy architecture detected: {found}'
+          PY
+
+      - name: Prepare static site
         shell: bash
         run: |
           mkdir -p _site
-          cat chunks/part-* > _site/index.html
-          cp layout-v4.css _site/layout-v4.css
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('_site/index.html')
-          page = path.read_text(encoding='utf-8')
-          stylesheet = '<link rel="stylesheet" href="layout-v4.css?v=20260724-final-header-fix">'
-          cleanup = '''<script id="remove-legacy-table-header">
-          (() => {
-            const removeHeader = () => {
-              document.querySelectorAll('thead').forEach(node => node.remove());
-              document.querySelectorAll('.toolbar').forEach(node => {
-                node.style.setProperty('position', 'static', 'important');
-                node.style.setProperty('top', 'auto', 'important');
-                node.style.setProperty('z-index', 'auto', 'important');
-              });
-              document.querySelectorAll('th').forEach(node => {
-                node.style.setProperty('position', 'static', 'important');
-                node.style.setProperty('top', 'auto', 'important');
-              });
-            };
-            removeHeader();
-            document.addEventListener('DOMContentLoaded', removeHeader, { once: true });
-            new MutationObserver(removeHeader).observe(document.documentElement, { childList: true, subtree: true });
-          })();
-          </script>'''
-          if '</head>' not in page or '</body>' not in page:
-              raise SystemExit('Invalid assembled HTML')
-          page = page.replace('</head>', stylesheet + '</head>', 1)
-          page = page.replace('</body>', cleanup + '</body>', 1)
-          path.write_text(page, encoding='utf-8')
-          PY
+          cp index.html _site/index.html
+          cp -R assets _site/assets
+          cp -R data _site/data
           touch _site/.nojekyll
-          test -s _site/index.html
-          test -s _site/layout-v4.css
-          grep -q 'layout-v4.css?v=20260724-final-header-fix' _site/index.html
-          grep -q 'remove-legacy-table-header' _site/index.html
-          grep -q 'thead,thead tr,thead th{display:none!important' _site/layout-v4.css
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
