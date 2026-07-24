@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>日本50音生活例句互動背誦表</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f5f7fb;color:#172033}
+    #loading{padding:24px;text-align:center;line-height:1.7}
+  </style>
+</head>
+<body>
+  <div id="loading">正在載入日本50音互動背誦表…</div>
+  <script>
+    (async()=>{
+      try{
+        const paths=['001','002','003','004','005'].map(n=>`chunks/part-${n}`);
+        const responses=await Promise.all(paths.map(path=>fetch(path,{cache:'no-store'})));
+        if(responses.some(response=>!response.ok)) throw new Error('load');
+        const page=(await Promise.all(responses.map(response=>response.text()))).join('');
+        document.open();
+        document.write(page);
+        document.close();
+      }catch(error){
+        document.getElementById('loading').innerHTML='頁面載入失敗，請重新整理後再試一次。';
+      }
+    })();
+  </script>
+</body>
+</html>
