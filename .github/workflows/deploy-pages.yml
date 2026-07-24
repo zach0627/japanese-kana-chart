@@ -21,13 +21,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Assemble site
+      - name: Prepare site
         shell: bash
         run: |
           mkdir -p _site
-          cat chunks/part-* > _site/index.html
+          cp index.html _site/index.html
+          cp -R chunks _site/chunks
           touch _site/.nojekyll
-          test "$(wc -c < _site/index.html)" -eq 26639
+          test -s _site/index.html
+          test -s _site/chunks/part-001
+          grep -q "position:static!important" _site/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
