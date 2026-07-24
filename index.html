@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#f6f7fb">
   <meta name="description" content="日本50音平假名、片假名、生活單字、例句、逐詞拼讀與發音練習">
   <title>日本50音生活例句互動背誦表</title>
-  <link rel="stylesheet" href="assets/styles.css?v=7">
-  <script src="assets/app.js?v=8" defer></script>
+  <link rel="stylesheet" href="assets/styles.css?v=9">
+  <script src="assets/app.js?v=9" defer></script>
 </head>
 <body>
   <main class="shell" id="app">
@@ -25,6 +25,10 @@
       <div class="toolbar">
         <label class="search-wrap">
           <span class="sr-only">搜尋</span>
+          <svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"></circle>
+            <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
           <input id="search" class="search" type="search" placeholder="搜尋假名、單字、中文或例句" autocomplete="off">
         </label>
         <div class="controls">
@@ -56,7 +60,7 @@
     </section>
 
     <aside class="note">
-      <strong>練習方式：</strong>預設使用適合初學者的慢速發音；可在上方切換「很慢、慢速、稍慢、正常」。先自己念假名與單字，再播放發音核對。展開例句後，按照「日文、假名分拍、羅馬字、中文」逐詞拼回完整句子。句子中的助詞「は」通常念 wa，「を」通常念 o。
+      <strong>練習方式：</strong>預設使用適合初學者的慢速發音；可在上方切換「很慢、慢速、稍慢、正常」。整句會依照詞組分段慢念並加入停頓，不會再用自然語速一次念完。句子中的助詞「は」通常念 wa，「を」通常念 o。
     </aside>
   </main>
 </body>
